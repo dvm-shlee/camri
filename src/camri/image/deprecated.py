@@ -135,6 +135,8 @@ class OrthoViewer:
     view_plain = ['(y,z)', '(x,z)', '(x,y)']
     
     def __init__(self, main_nii, underlay_nii=None, **kwargs):
+        if isinstance(main_nii, Handler):
+            main_nii = main_nii._nifti
         self.main_nii = main_nii
         self.main_img, self.main_meshgrid, self.main_resol = gridding(main_nii)
         self.main_thr = None
@@ -228,6 +230,8 @@ class OrthoViewer:
         self.set_annotation_params()
     
     def set_underlay(self, underlay_nii):
+        if isinstance(underlay_nii, Handler):
+            underlay_nii = underlay_nii._nifti
         self.ulay_nii = underlay_nii
         self.ulay_img, self.ulay_meshgrid, self.ulay_resol = gridding(underlay_nii)
         img = self.ulay_img.copy()

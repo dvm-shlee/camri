@@ -3,6 +3,8 @@ from .utils import validate_nifti_input, compose_nifti
 from .utils import split_affine, merge_affine
 from .utils import remove_element_at
 from .utils import calculate_transform_matrix
+from ..prep.rsfc import corr_with, get_cluster_coordinates
+from nibabel.nifti1 import Nifti1Image
 
 class Handler:
     def __init__(self, nifti, **kwargs):
@@ -228,9 +230,28 @@ class Handler:
         return Handler(nifti)
     
 
-    # def get_seed(self, coord, distance):
+    def get_seedmap(self, indice, size, nn_level=3, mask_img=None):
+        data = self.get_data()
+        if mask_img:
+            if isinstance(mask_img, Handler):
+                mask_idx = np.nonzero(mask_img.get_data())
+            elif isinstance(mask_img, Nifti1Image):
+                mask_idx = np.nonzero(mask_img.dataobj)
+            else:
+                mask_idx = np.nonzero(data)
+        else:
+            mask_idx = np.nonzero(data)
 
-
+        if (self.shape - (np.array(indice)+size/2)) < 0 or (np.array(indice)-size/2) < 0:
+            raise ValueError("Seed can be out of FOV, please move the seed coordinate.")
+        seed_mask = tuple(np.array(get_cluster_coordinates(indice, 
+                                                           size=size, 
+                                                           nn_level=nn_level)).T.tolist())
+        data = self.get_data()[mask_idx]
+        seed = self.get_data()[seed_mask].mean()
+        r = corr_with(seed[np.newaxis, :], data)
+        nifti = compose_nifti(r, self._nifti, mask_idx=mask_idx)
+        return Handler(nifti)
     
     def xyz_to_itk(self, x, y, z):
         """Convert RAS+ (x, y, z) ordered coordinates to matrix coordinates (i, t, k)."""
