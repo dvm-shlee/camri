@@ -245,7 +245,7 @@ class Handler:
                                                            size=size, 
                                                            nn_level=nn_level)).T.tolist())
         data = self.get_data()[mask_idx]
-        seed = self.get_data()[seed_mask].mean()
+        seed = self.get_data()[seed_mask].mean(0)
         r = corr_with(seed[np.newaxis, :], data)
         nifti = compose_nifti(r, self._nifti, mask_idx=mask_idx)
         return Handler(nifti)
