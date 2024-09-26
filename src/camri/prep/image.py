@@ -1,12 +1,12 @@
 import numpy as np
 import nibabel as nib
-from ..viewer import compose_nii
+from ..image.utils import compose_nifti
     
 
 def skull_stripping(input_nii, mask_nii):
     mask_idx = np.nonzero(mask_nii.dataobj)
     data = np.asarray(input_nii.dataobj)[mask_idx]
-    return compose_nii(data, img_nii, mask_idx=mask_idx)
+    return compose_nifti(data, input_nii, mask_idx=mask_idx)
 
 
 def estimate_sigma(dxyz, fwhm: float) -> float:

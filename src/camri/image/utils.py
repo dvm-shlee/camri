@@ -93,7 +93,7 @@ def rotate_affine(affine, gamma=0, phi=0, theta=0):
     phi(fee): rotate radian for 1 axis
     theta: rotate radian for 2 axis
     """
-    rotate, origin = aff2mat(affine)
+    rotate, origin = split_affine(affine)
     for i, radian in enumerate([gamma, phi, theta]):
         rotate = rotate_function(rotate, radian, axis=i)
         origin = rotate_function(origin, radian, axis=1)

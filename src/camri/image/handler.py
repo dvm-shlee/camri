@@ -227,6 +227,11 @@ class Handler:
         nifti = compose_nifti(dataobj_cropped, self._nifti, affine)
         return Handler(nifti)
     
+
+    def get_seed(self, coord, distance):
+        
+
+    
     def xyz_to_itk(self, x, y, z):
         """Convert RAS+ (x, y, z) ordered coordinates to matrix coordinates (i, t, k)."""
         xyz_dict = {"x":x, "y":y, "z":z}
@@ -264,8 +269,8 @@ class Handler:
         if self.dim > 3:
             max_index = self.shape[-1]-1
             if frame_index > max_index:
-                raise IndexError(f"index {idx} is out of bounds for axis {self.dim-1} with size {max_index}")
-            return np.asarray(dataobj[..., idx]).squeeze()
+                raise IndexError(f"index {frame_index} is out of bounds for axis {self.dim-1} with size {max_index}")
+            return np.asarray(dataobj[..., frame_index]).squeeze()
         else:
             return np.asarray(dataobj)
     
