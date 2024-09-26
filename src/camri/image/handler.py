@@ -228,8 +228,8 @@ class Handler:
         return Handler(nifti)
     
 
-    def get_seed(self, coord, distance):
-        
+    # def get_seed(self, coord, distance):
+
 
     
     def xyz_to_itk(self, x, y, z):

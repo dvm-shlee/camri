@@ -3,7 +3,7 @@ import pandas as pd
 import nibabel as nib
 from .signal import signal_normalization
 from .signal import nuisance_regression
-from .image import compose_nii
+from .image import compose_nifti
 
 
 def load_volreg(path, mean_radius=9):
@@ -27,7 +27,7 @@ def load_volreg(path, mean_radius=9):
 
 def trimming_dummies(nibobj, num_dummy=0):
     dataobj = np.asarray(nibobj.dataobj)[..., num_dummy:]
-    return compose_nii(dataobj, nibobj)
+    return compose_nifti(dataobj, nibobj)
 
 
 def trimming_mpfile(input_path, output_path, num_dummy=0):
@@ -98,6 +98,6 @@ def signal_processing(input_nii, mask_nii,
     else:
         norm_data = data.copy()
     filt_data, nuis_data = nuisance_regression(norm_data, port, ort)
-    filt_nii = compose_nii(filt_data, input_nii, mask_idx)
-    nuis_nii = compose_nii(nuis_data, input_nii, mask_idx)
+    filt_nii = compose_nifti(filt_data, input_nii, mask_idx)
+    nuis_nii = compose_nifti(nuis_data, input_nii, mask_idx)
     return filt_nii, nuis_nii

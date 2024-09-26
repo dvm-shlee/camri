@@ -37,5 +37,5 @@ def spatial_smoothing(input_nii, fwhm, mask_nii=None):
     
     if has_mask:
         smoothed_dataobj[mask_bool] = 0
-    return compose_nii(smoothed_dataobj, input_nii)
+    return compose_nifti(smoothed_dataobj, input_nii)
 
