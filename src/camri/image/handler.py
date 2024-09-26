@@ -241,9 +241,6 @@ class Handler:
                 mask_idx = np.nonzero(data)
         else:
             mask_idx = np.nonzero(data)
-
-        if (self.shape - (np.array(indice)+size/2)) < 0 or (np.array(indice)-size/2) < 0:
-            raise ValueError("Seed can be out of FOV, please move the seed coordinate.")
         seed_mask = tuple(np.array(get_cluster_coordinates(indice, 
                                                            size=size, 
                                                            nn_level=nn_level)).T.tolist())
