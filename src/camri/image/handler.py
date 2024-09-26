@@ -238,7 +238,7 @@ class Handler:
             elif isinstance(mask_img, Nifti1Image):
                 mask_idx = np.nonzero(mask_img.dataobj)
             else:
-                mask_idx = np.nonzero(data)
+                mask_idx = np.nonzero(data.mean(-1))
         else:
             mask_idx = np.nonzero(data)
         seed_mask = tuple(np.array(get_cluster_coordinates(indice, 
