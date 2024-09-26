@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "camri"
+dynamic = ['version']
+description = "Useful utility module for CAMRI at UNC at Chapel Hill"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "SungHo Lee", email = "shlee@unc.edu" }
+]
+maintainers = [
+    { name = "SungHo Lee", email = "shlee@unc.edu" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10"
+]
+keywords = ["neuroimage", "python"]
+requires-python = ">=3.7"
+dependencies = [
+    "pyyaml>=6.0.1",
+    "packaging>=23.0",
+    "scipy",
+    "pandas",
+    "numpy",
+    "nibabel",
+    "matplotlib",
+    "tqdm",
+]
+urls = {Homepage = "https://camri.org"}
+
+# Additional configuration specific to hatch can go under 'tool.hatch.*'
+[tool.hatch.version]
+path = "src/camri/__init__.py"
+style = "pep440"
+
+[tool.hatch.build.targets.sdist]
+include = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/camri"]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "DEBUG"
