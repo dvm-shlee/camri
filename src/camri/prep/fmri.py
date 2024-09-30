@@ -98,6 +98,6 @@ def signal_processing(input_nii, mask_nii,
     else:
         norm_data = data.copy()
     filt_data, nuis_data = nuisance_regression(norm_data, port, ort)
-    filt_nii = compose_nifti(filt_data, input_nii, mask_idx)
-    nuis_nii = compose_nifti(nuis_data, input_nii, mask_idx)
+    filt_nii = compose_nifti(filt_data, input_nii, mask_idx=mask_idx)
+    nuis_nii = compose_nifti(nuis_data, input_nii, mask_idx=mask_idx)
     return filt_nii, nuis_nii

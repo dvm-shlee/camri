@@ -3,16 +3,19 @@ from .utils import validate_nifti_input, compose_nifti
 from .utils import split_affine, merge_affine
 from .utils import remove_element_at
 from .utils import calculate_transform_matrix
-from ..prep.rsfc import corr_with, get_cluster_coordinates
-from nibabel.nifti1 import Nifti1Image
+
 
 class Handler:
+    """ Image Handler object to help image handling easier for image analsys and reviewing the image
+    """
     def __init__(self, nifti, **kwargs):
         self._nifti = validate_nifti_input(nifti)
+        
+        
         self.reset_orient()
-        self.affine_params = kwargs.get('affine_params', {'decimals': 3, 
-                                                          'deoblique': True})
-        if self.affine_params['deoblique']:
+        self._affine_params = kwargs.get('affine_params', {'decimals': 3, 
+                                                           'deoblique': True})
+        if self._affine_params['deoblique']:
             self.deoblique()
 
     @property
@@ -33,13 +36,13 @@ class Handler:
             return 1
         elif self.dim == 4:
             # functional images or vector images (DTI)
-            return self._nifti.header['dim'][3]
+            return self._nifti.header['dim'][4]
         elif self.dim == 5 and self._nufti.header[3] == 1:
             # afni's statistic bricks
-            return self._nifti.header['dim'][4]
+            return self._nifti.header['dim'][5]
         else:
             # other exception cases, this case, the handler may not properly works
-            return self._nufti.header['dim'][3:]
+            return self._nufti.header['dim'][4:]
     
     @property
     def rotate(self):
@@ -78,8 +81,8 @@ class Handler:
     
     @property
     def orient_info(self):
-        """return the correspond eucledian coordinate axis and subject position toward increase of matrix index based on RAS+ oriented coordinate space.
-        
+        """return the correspond eucledian coordinate axis and subject position toward increase of 
+        matrix index based on RAS+ oriented coordinate space.
         """
         itk_code = []
         for i, direct in enumerate(self.axis_direction):
@@ -173,9 +176,6 @@ class Handler:
     def reset_orient(self):
         self._rotate, self._origin = split_affine(self._nifti.affine)
         
-    def transform_to_ras(self):
-        return Handler(self.ras_nifti)
-        
     def is_oblique(self):
         return np.nonzero(self.rotate)[0].shape[0] != 3
     
@@ -192,97 +192,26 @@ class Handler:
                 # print("Applying deoblique transformation...")
                 # TODO: apply transform to deoblique matrix 
                 # print("Deoblique transformation applied.")
-
-    def crop(self, l=0, r=0, p=0, a=0, i=0, s=0):
-        slices = []
-        shift = []
-        for j, c in enumerate(self.orientation_codes[:3]):
-            if c == "L":
-                l = self.shape[j] - l
-                slices.append(slice(r, l))
-                shift.append(r)
-            elif c == "R":
-                r = self.shape[j] - r
-                slices.append(slice(l, r))
-                shift.append(l)
-            elif c == "P":
-                p = self.shape[j] - p
-                slices.append(slice(a, p))
-                shift.append(a)
-            elif c == "A":
-                a = self.shape[j] - a
-                slices.append(slice(p, a))
-                shift.append(p)
-            elif c == "I":
-                i = self.shape[j] - i
-                slices.append(slice(s, i))
-                shift.append(s)
-            else:
-                s = self.shape[j] - s
-                slices.append(slice(i, s))
-                shift.append(i)
-        
-        origin = self.origin.copy()
-        origin += self.orthogonal.dot(np.array(shift) * self.resol)
-        dataobj_cropped = self.get_data()[tuple(slices)]
-        affine = merge_affine(self.rotate, origin)
-        nifti = compose_nifti(dataobj_cropped, self._nifti, affine)
-        return Handler(nifti)
-    
-
-    def get_seedmap(self, indice, size, nn_level=3, mask_img=None):
-        data = self.get_data()
-        if mask_img:
-            if isinstance(mask_img, Handler):
-                mask_idx = np.nonzero(mask_img.get_data())
-            elif isinstance(mask_img, Nifti1Image):
-                mask_idx = np.nonzero(mask_img.dataobj)
-            else:
-                mask_idx = np.nonzero(data.mean(-1))
-        else:
-            mask_idx = np.nonzero(data)
-        seed_mask = tuple(np.array(get_cluster_coordinates(indice, 
-                                                           size=size, 
-                                                           nn_level=nn_level)).T.tolist())
-        data = self.get_data()[mask_idx]
-        seed = self.get_data()[seed_mask].mean(0)
-        r = corr_with(seed[np.newaxis, :], data)
-        nifti = compose_nifti(r, self._nifti, mask_idx=mask_idx)
-        return Handler(nifti)
     
     def xyz_to_itk(self, x, y, z):
         """Convert RAS+ (x, y, z) ordered coordinates to matrix coordinates (i, t, k)."""
-        xyz_dict = {"x":x, "y":y, "z":z}
-        itk = []
-        for itk_id, axis_name in enumerate(self.xyz_axis_order):
-            val = xyz_dict[axis_name]
-            itk.append(self.convert_coordinate(itk_id, val, to='index'))
-        return tuple(itk)
+        itk = (np.array([x, y, z, 0]) - self.affine[:, 3]).dot(np.linalg.inv(self.affine))[:3]
+        return tuple(itk.astype(int))
+    
     
     def itk_to_xyz(self, i, t, k):
         """Convert matrix coordinates (i, t, k) to RAS+ (x, y, z) ordered coordinates."""
-        xyz = np.empty(3)
-        for itk_id, v in enumerate(np.array([i, t, k])):
-            ras_id = self.ras_to_itk_axis_order[itk_id]
-            xyz[ras_id] = self.convert_coordinate(itk_id, v, to='space')
-        return xyz
-    
-    def convert_coordinate(self, axis, value, to='index', decimals=3):
-        """ axis must be the axis id of matrix, not RAS+ coordinate
-        which means, 0 indicates first axis of matrix, then if matrix oriented to RAS+, it will returns
-        coordinate from x (L->R) axis, or just simply index value according to the RAS+ coordinates
-        """
-        axis_code = self.xyz_axis_order[axis]
-        mg = self.meshgrid[axis_code]
-        if to == 'index':
-            return np.argmin(np.abs(mg - value))
-        elif to == 'space':
-            return np.round(mg[value], decimals=decimals)
+        xyz = np.array([i, t, k, 0]).dot(self.affine)[:3] + self.affine[:3, 3]
+        return tuple(xyz)
     
     def get_data(self):
+        """ Return whole data matrix
+        """
         return self._nifti.get_fdata()
     
     def get_volume(self, frame_index=0):
+        """ Retern specific time data.
+        """
         dataobj = self._nifti.dataobj
         if self.dim > 3:
             max_index = self.shape[-1]-1
@@ -293,6 +222,8 @@ class Handler:
             return np.asarray(dataobj)
     
     def get_plane_by_itk_index(self, slice_index, axis=2, frame_index=0):
+        """ Retern 2D plane image at given axis id and index.
+        """
         volume = self.get_volume(frame_index)
         slicer = [slice(None, None, None)] * 3
         slicer[axis] = slice_index
@@ -307,7 +238,20 @@ class Handler:
             extent.extend([meshgrid[0] - pad, meshgrid[-1] + pad])
         return dict(zip(xyz_order, orient_codes)), extent, volume[tuple(slicer)]
         
-    def get_plane_by_ras_coordinate(self, coord, plane='axial', frame_index=0):
-        axis_id = list(self.indexed_matrix_plane_order).index(plane)
-        slice_index = self.convert_coordinate(axis_id, coord, to='index')
+    def get_plane_by_xyz_coord(self, coord, plane='axial', frame_index=0):
+        """ Retern 2D plane image at given coordinate and plane name.
+        """
+        plane_to_axis = {'axial': 'z', 'coronal': 'y', 'sagital':'x'}
+        axis = plane_to_axis[plane]
+        axis_id = list(self.xyz_axis_order).index(axis)
+        itk = self.xyz_to_itk(*(np.ones(3) * coord).tolist())
+        slice_index = itk[axis_id]
         return self.get_plane_by_itk_index(slice_index, axis_id, frame_index)
+    
+    def __contains__(self):
+        """ In operation
+        return data in mask
+        
+        
+        """
+        pass
