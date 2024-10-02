@@ -57,7 +57,7 @@ class Handler:
         return merge_affine(self.rotate, self.origin)
     
     @rotate.setter
-    def set_rotate(self, rotate):
+    def rotate(self, rotate):
         # Ensure that rotate is a 3x3 array (or list of lists)
         if isinstance(rotate, (list, tuple, np.ndarray)) and np.shape(rotate) == (3, 3):
             self._rotate = np.array(rotate)  # Convert to numpy array for consistency
@@ -65,7 +65,7 @@ class Handler:
             raise ValueError("rotate must be a 3x3 array, list, or tuple.")
     
     @origin.setter
-    def set_origin(self, origin):
+    def origin(self, origin):
         if isinstance(origin, (list, tuple, np.ndarray)) and len(origin) == 3:
             self._origin = np.array(origin)  # Convert to numpy array for consistency
         else:
@@ -185,7 +185,7 @@ class Handler:
             rotate = self.orthogonal.dot(np.diag(self.resol))
             if affine_only:
                 print("Deobliquing the affine information only...")
-                self.set_rotate(rotate)
+                self.rotate = rotate
                 print("Affine matrix deobliqued.")
             else:
                 raise NotImplementedError("Deobliquing image matrix is not supported yet...")
