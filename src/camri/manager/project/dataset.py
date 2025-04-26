@@ -138,7 +138,7 @@ class RawDataset(BaseParser):
     def filter(self, 
                subject: Union[List[str], str, None] = None, 
                session: Union[List[str], str, None] = None,
-               modal: Union[List[str], str, None] = None,
+               modal: Union[List[str], str, None] = None,  # dataclass?
                annotation: Union[List[str], str, None] = None,
                regex: Optional[str] = None,
                regex_ignore: Optional[str] = None,
@@ -237,7 +237,7 @@ class StepDataset(BaseParser):
     def filter(self, 
                subject: Union[List[str], str, None] = None, 
                session: Union[List[str], str, None] = None,
-               modal: Union[List[str], str, None] = None,
+               modal: Union[List[str], str, None] = None,  # dataclass?
                annotation: Union[List[str], str, None] = None,
                regex: Optional[str] = None,
                regex_ignore: Optional[str] = None,

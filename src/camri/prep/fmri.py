@@ -3,7 +3,7 @@ import pandas as pd
 import nibabel as nib
 from .signal import signal_normalization
 from .signal import nuisance_regression
-from .image import compose_nifti
+from ..utils.nifti import compose_nifti
 
 
 def load_volreg(path, mean_radius=9):

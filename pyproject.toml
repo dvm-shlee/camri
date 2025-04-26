@@ -36,6 +36,8 @@ dependencies = [
     "nibabel",
     "matplotlib",
     "tqdm",
+    "ipympl>=0.9.7",
+    "ipywidgets>=8.1.2"
 ]
 urls = {Homepage = "https://camri.org"}
 
