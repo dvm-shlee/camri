@@ -49,3 +49,5 @@ pytest_cache/
 *.tmp
 *.bak
 *.swp
+dataset/
+tests/
