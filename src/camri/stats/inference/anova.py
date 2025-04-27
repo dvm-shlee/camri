@@ -86,7 +86,7 @@ class Anova:
     def _fit_partial(self, df_resid):
         X = self.model.X_
         dinfo = X.design_info
-        coef = np.concat([self.model.intercept_.copy(), self.model.coef_.copy()], axis=0)
+        coef = np.concatenate([self.model.intercept_.copy(), self.model.coef_.copy()], axis=0)
         inv_xtx = np.linalg.pinv(X.T @ X)
         resid = self.model.resid
         scale = np.sum(resid**2, axis=0) / df_resid
