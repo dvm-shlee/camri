@@ -208,6 +208,8 @@ class RegressionMetrics:
                 Degrees of freedom for each column.
                 - **error** : int
                 Degrees of freedom for error (n_samples − rank(X)).
+            - **inv_XtX** : ndarray, shape (n_features, n_features)
+            Inverse of the design matrix transpose times
         """
         n_samples, _ = X.shape
         df_err = X.shape[0] - np.linalg.matrix_rank(X)
@@ -259,6 +261,7 @@ class RegressionMetrics:
             "r2":                r2,
             "r2_adj":            r2_adj,
             "ss":                ss,
-            "dof":               dof
+            "dof":               dof,
+            "inv_XtX":           XtX_inv
         }
 

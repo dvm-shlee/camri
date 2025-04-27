@@ -87,7 +87,7 @@ class Anova:
         X = self.model.X_
         dinfo = X.design_info
         coef = np.concatenate([self.model.intercept_.copy(), self.model.coef_.copy()], axis=0)
-        inv_xtx = np.linalg.pinv(X.T @ X)
+        inv_xtx = self.model.statistics_["inv_XtX"]
         resid = self.model.resid
         scale = np.sum(resid**2, axis=0) / df_resid
         cov = inv_xtx[np.newaxis, :, :] * scale[:, None, None]
@@ -147,7 +147,7 @@ class Anova:
                 L12 = L1
                 r = L1.shape[0]
             r_matrix = L12
-            f_values.append(self._f_test(dmat, scale, coef, r_matrix))
+            f_values.append(self._f_test(scale, coef, r_matrix))
         return np.stack(f_values, 0)
 
     def _fit_type3(self, df_resid):
@@ -162,18 +162,15 @@ class Anova:
             L1 = np.eye(dmat.shape[1])[cols]
             L12 = L1
             r = L1.shape[0]
-            f_values.append(self._f_test(dmat, scale, coef, L12))
+            f_values.append(self._f_test(scale, coef, L12))
         return np.stack(f_values, 0)
         
-    @staticmethod
-    def _f_test(dmat: np.ndarray, scale: np.ndarray, coef: np.ndarray, r_matrix: np.ndarray) -> np.ndarray:
+    def _f_test(self, scale: np.ndarray, coef: np.ndarray, r_matrix: np.ndarray) -> np.ndarray:
         """
         Compute F-statistics for multiple targets in a fully vectorized manner.
 
         Parameters
         ----------
-        dmat : ndarray, shape (n_samples, n_features)
-            Design matrix X used for fitting.
         scale : ndarray, shape (n_targets,)
             Residual variances (σ²) for each target/voxel.
         coef : ndarray, shape (n_features, n_targets)
@@ -195,7 +192,7 @@ class Anova:
         Rb = r_matrix @ coef  # (J, n_targets)
 
         # Compute base covariance R (X^T X)^- R^T: shape (J, J)
-        XtX_inv = np.linalg.pinv(dmat.T @ dmat)  # (p, p)
+        XtX_inv = self.model.statistics_["inv_XtX"]  # (p, p)
         cov_base = r_matrix @ XtX_inv @ r_matrix.T  # (J, J)
 
         # Broadcast scale to form per-target covariance: shape (n_targets, J, J)
@@ -244,7 +241,7 @@ class Anova:
         scale = np.sum(resid**2, axis=0) / df_resid  # shape (n_targets,)
 
         # Compute covariance of beta: (X^T X)^-1
-        XtX_inv = np.linalg.pinv(X.T @ X)  # shape (n_features, n_features)
+        XtX_inv = self.model.statistics_["inv_XtX"]  # shape (n_features, n_features)
 
         # Numerator: R @ beta -> shape (n_targets,)
         num = contrast @ beta  # shape (n_targets,)

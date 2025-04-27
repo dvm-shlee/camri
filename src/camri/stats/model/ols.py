@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import t
 from patsy import dmatrix
 from ..base import BaseEstimator
 from ..algebra import solve_qr
@@ -84,4 +85,66 @@ class OLS(BaseEstimator):
         if self.y_pred_ is None:
             raise ValueError("Model has not been fitted yet.")
         return self.resid_
+    
+    def marginal_summary(self, contrast, alpha=0.05):
+        """
+        Compute marginal predicted values, standard errors, and confidence intervals
+        for a given linear contrast from a fitted OLS model.
 
+        Parameters
+        ----------
+        contrast : array_like, shape (n_features,)
+            Contrast vector R specifying the linear combination of coefficients.
+        alpha : float, default=0.05
+            Significance level for confidence intervals (1-alpha CI).
+
+        Returns
+        -------
+        summary : dict
+            {
+            'pred': ndarray (n_targets,),     # predicted marginal means
+            'se':   ndarray (n_targets,),     # standard errors
+            'ci_lower': ndarray (n_targets,), # lower bound of CI
+            'ci_upper': ndarray (n_targets,), # upper bound of CI
+            't_df': int,                      # degrees of freedom
+            't_crit': float                   # critical t value for CI
+            }
+
+        Notes
+        -----
+        Prediction: R @ beta
+        Var(pred) = sigma^2 * (R @ (X'X)^{-1} @ R.T)
+        SE = sqrt(var(pred))
+        CI: pred ± t_{df,1-alpha/2} * SE
+        """
+        # Stack intercept and coefficients
+        beta = np.vstack([self.intercept_, self.coef_])  # (n_features, n_targets)
+        # Compute predicted marginal means
+        pred = contrast @ beta                                # (n_targets,)
+
+        # Degrees of freedom and residual variance per target
+        df_resid = self.statistics_["dof"]["error"]                               # (n_samples, n_targets)
+        sigma2 = self.statistics_["residual_variance"]       # (n_targets,)
+
+        # Compute covariance factor
+        XtX_inv = self.statistics_["inv_XtX"]                    # (n_features, n_features)
+        var_factor = contrast @ XtX_inv @ contrast.T          # scalar
+
+        # Standard error of prediction for each target
+        se = np.sqrt(sigma2 * var_factor)                     # (n_targets,)
+
+        # Critical t-value
+        t_crit = t.ppf(1 - alpha/2, df_resid)
+
+        # Confidence intervals
+        ci_lower = pred - t_crit * se
+        ci_upper = pred + t_crit * se
+
+        return {
+            'pred': pred,
+            'se': se,
+            'ci_lower': ci_lower,
+            'ci_upper': ci_upper,
+            't_df': df_resid,
+            't_crit': t_crit
+        }
