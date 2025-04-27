@@ -284,17 +284,15 @@ class Anova:
         n_terms, n_voxels = obs.shape
         null_dist = np.zeros((n_perm, n_terms, n_voxels))
 
-        subj = self.df[shuffle_col].values
-        unique = np.unique(subj)
-        idx_map = {s: np.where(subj == s)[0] for s in unique}
+        unique_subj = self.df[shuffle_col].unique()
 
         for i in range(n_perm):
-            permuted = rng.permutation(unique)
-            order = np.concatenate([idx_map[s] for s in permuted])
-            dfp = self.df.iloc[order].reset_index(drop=True)
-            yp = self.y[order]
+            permuted = rng.permutation(unique_subj)
+            mapping = dict(zip(unique_subj, permuted))
+            dfp = self.df.copy()
+            dfp[shuffle_col] = dfp[shuffle_col].map(mapping)
             # rebuild design
-            m = self.model.__class__(self.model.formula, dfp, yp).fit()
+            m = self.model.__class__(self.model.formula, dfp, self.y).fit()
             a = Anova(m, typ=self.typ)
             a.fit()
             if contrast is None:
