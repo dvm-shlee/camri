@@ -291,8 +291,10 @@ class Anova:
             mapping = dict(zip(unique_subj, permuted))
             dfp = self.df.copy()
             dfp[shuffle_col] = dfp[shuffle_col].map(mapping)
+            idxp = [np.where(dfp[shuffle_col] == subj)[0][0] for subj in unique_subj]
+            yp = self.y[idxp]
             # rebuild design
-            m = self.model.__class__(self.model.formula, dfp, self.y).fit()
+            m = self.model.__class__(self.model.formula, dfp, yp).fit()
             a = Anova(m, typ=self.typ)
             a.fit()
             if contrast is None:
