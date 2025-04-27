@@ -28,6 +28,7 @@ classifiers = [
 keywords = ["neuroimage", "python"]
 requires-python = ">=3.7"
 dependencies = [
+    "pytest",
     "pyyaml>=6.0.0",
     "packaging>=23.0",
     "scipy",
