@@ -1,5 +1,4 @@
 import numpy as np
-from patsy import dmatrix
 from scipy.stats import f, t
 from ..algebra import safe_divide
 from ...utils.dmat import strip_termname, lrange
@@ -7,7 +6,7 @@ from ...utils import arr2mat
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from scipy.linalg import pinvh
+# from scipy.linalg import pinvh
 
 class Anova:
     def __init__(self, model, typ="I"):
@@ -365,7 +364,7 @@ class Anova:
                 nodes_in_comp = np.where(labels == comp_idx)[0]
                 if len(nodes_in_comp) > 1:
                     comp_mask = mask[np.ix_(nodes_in_comp, nodes_in_comp)]
-                    num_edges = np.sum(np.triu(comp_mask, k=1))
+                    num_edges = int(np.sum(np.triu(comp_mask, k=1)))
                     if num_edges > 0:
                        term_edge_sizes.append(num_edges)
                        edge_list = []
@@ -374,7 +373,7 @@ class Anova:
                            if comp_mask[r, c]:
                                original_r, original_c = nodes_in_comp[r], nodes_in_comp[c]
                                edge_list.append(tuple(sorted((original_r, original_c))))
-                       term_clusters.append(edge_list)
+                       term_clusters.append(np.array(edge_list))
             clusters.append(term_clusters)
             if term_edge_sizes:
                  edge_sizes.append(term_edge_sizes)
@@ -443,7 +442,7 @@ class Anova:
                     continue
                 # Proportion of permutations where max size >= observed size
                 # Add 1 to numerator and denominator for conservative p-value (prevents p=0)
-                p_val = (np.sum(null_max_size[:, term_idx] >= obs_size) + 1) / (n_perm + 1)
+                p_val = float((np.sum(null_max_size[:, term_idx] >= obs_size) + 1) / (n_perm + 1))
                 term_pvals.append(p_val)
             cluster_p_values.append(term_pvals)
         return obs_clusters_edges, cluster_p_values, null_max_size, obs_cluster_sizes
