@@ -3,7 +3,10 @@ from patsy import dmatrix
 from scipy.stats import f, t
 from ..algebra import safe_divide
 from ...utils.dmat import strip_termname, lrange
+from ...utils import arr2mat
 import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 
 class Anova:
@@ -228,29 +231,16 @@ class Anova:
         p_vals : ndarray, shape (n_targets,)
             P-values.
         """
-        # Design matrix and residuals
         model = self.model
         X = model.X_
         resid = model.resid
         df_resid = model.statistics_["dof"]["error"]
-
-        # Stack intercept and coefficients -> shape (n_features, n_targets)
         beta = np.vstack([model.intercept_, model.coef_])
-
-        # Residual variance for each target
-        scale = np.sum(resid**2, axis=0) / df_resid  # shape (n_targets,)
-
-        # Compute covariance of beta: (X^T X)^-1
-        XtX_inv = self.model.statistics_["inv_XtX"]  # shape (n_features, n_features)
-
-        # Numerator: R @ beta -> shape (n_targets,)
-        num = contrast @ beta  # shape (n_targets,)
-
-        # Denominator: sqrt(scale * R @ (X^T X)^-1 @ R^T)
-        var = contrast @ XtX_inv @ contrast.T  # scalar
-        se = np.sqrt(scale * var)  # shape (n_targets,)
-
-        # T-statistics and two-tailed p-values
+        scale = np.sum(resid**2, axis=0) / df_resid  
+        XtX_inv = self.model.statistics_["inv_XtX"]
+        num = contrast @ beta  
+        var = contrast @ XtX_inv @ contrast.T  
+        se = np.sqrt(scale * var)  
         t_vals = num / se
         if two_sided:
             p_vals = 2 * (1 - t.cdf(np.abs(t_vals), df_resid))
@@ -259,7 +249,8 @@ class Anova:
 
         return {"t_values":t_vals, "p_values":p_vals}
     
-    def permute(self, shuffle_col, contrast=None, n_perm=1000, seed=None, two_sided=False):
+    def permute(self, shuffle_col, contrast=None, n_perm=1000, seed=None, 
+                two_sided=False, max_stat=False):
         """
         Permutation testing for ANOVA or a contrast.
 
@@ -271,38 +262,203 @@ class Anova:
             raise ValueError("df and y must be provided for permutation tests")
         rng = np.random.default_rng(seed)
 
-        # Compute observed statistics
         if contrast is None:
             self.fit()
-            obs = self.results_["f_values"]  # shape (n_terms, n_voxels)
+            obs = self.results_["f_values"]
         else:
             obs = self.t_test(contrast)["t_values"]
 
         n_terms, n_voxels = obs.shape
         null_dist = np.zeros((n_perm, n_terms, n_voxels))
+        null_max = np.zeros((n_perm, n_terms))
 
         unique_subj = self.df[shuffle_col].unique()
+        subject_indices_map = {subj: np.where(self.df[shuffle_col] == subj)[0]
+                               for subj in unique_subj}
 
-        for i in range(n_perm):
-            permuted = rng.permutation(unique_subj)
-            mapping = dict(zip(unique_subj, permuted))
-            dfp = self.df.copy()
-            dfp[shuffle_col] = dfp[shuffle_col].map(mapping)
-            idxp = [np.where(dfp[shuffle_col] == subj)[0][0] for subj in unique_subj]
-            yp = self.y[idxp]
-            # rebuild design
-            m = self.model.__class__(self.model.formula, dfp, yp).fit()
+        for p in range(n_perm):
+            permuted_subj_indices = rng.permutation(len(unique_subj))
+            yp = np.zeros_like(self.y)
+            current_start_row = 0
+            for i in range(len(unique_subj)):
+                original_subject_index = permuted_subj_indices[i]
+                subject_whose_data_to_take = unique_subj[original_subject_index]
+                source_indices = subject_indices_map[subject_whose_data_to_take]
+                num_rows_for_subject = len(source_indices)
+                target_slice = slice(current_start_row, current_start_row + num_rows_for_subject)
+                if self.y.ndim == 1:
+                    yp[target_slice] = self.y[source_indices]
+                elif self.y.ndim == 2:
+                    yp[target_slice, :] = self.y[source_indices, :]
+                else:
+                    raise NotImplementedError("y shuffling for ndim > 2 not implemented")
+                current_start_row += num_rows_for_subject
+
+            m = self.model.__class__(self.model.formula, self.df, yp).fit()
             a = Anova(m, typ=self.typ)
             a.fit()
             if contrast is None:
                 stat = a.results_["f_values"]
             else:
                 stat = a.t_test(contrast)["t_values"]
-            null_dist[i] = stat
+            if max_stat:
+                null_max[p] = np.max(np.abs(stat) if two_sided else stat, axis=1)
+            null_dist[p] = stat
 
-        # Empirical p-values
-        if two_sided:
-            p_vals = np.mean(np.abs(null_dist) >= np.abs(obs)[None, :, :], axis=0)
+        if max_stat:
+            if two_sided:
+                p_vals = np.mean(np.abs(null_max)[:, :, None] >= np.abs(obs)[None, :, :], axis=0)
+            else:
+                p_vals = np.mean(null_max[:, :, None] >= obs[None, :, :], axis=0)
+            return null_max, obs, p_vals
         else:
-            p_vals = np.mean(null_dist >= obs[None, :, :], axis=0)
-        return null_dist, obs, p_vals
+            # Empirical p-values
+            if two_sided:
+                p_vals = np.mean(np.abs(null_dist) >= np.abs(obs)[None, :, :], axis=0)
+            else:
+                p_vals = np.mean(null_dist >= obs[None, :, :], axis=0)
+            return null_dist, obs, p_vals
+    
+    @staticmethod
+    def _arr2symmat(arr):
+        mat = arr2mat(arr)
+        mat += mat.T
+        return mat
+    
+    @staticmethod
+    def _arr2graph(obs, threshold):
+        if len(obs.shape) == 1:
+            obs = obs[None, :]
+        mask_obs = np.zeros(obs.shape, dtype=bool)
+        if isinstance(threshold, list):
+            for i, t in enumerate(threshold):
+                mask_obs[i][obs[i] >= t] = True
+        else:
+            mask_obs[obs >= threshold] = True
+        mask_obs = mask_obs.astype(int)
+        
+        graph_obs = []
+        mask_mats = []
+        for mo in mask_obs:
+            mo_mat = Anova._arr2symmat(mo)
+            graph_obs.append(csr_matrix(mo_mat))
+            mask_mats.append(mo_mat)
+        return graph_obs, np.array(mask_mats)
+    
+    @staticmethod
+    def _compute_cluster_size(graph_obs, mask_obs):
+        """Computes size (number of edges) of connected components"""
+        clusters = []
+        edge_sizes = [] 
+        for i, graph in enumerate(graph_obs):
+            mask = mask_obs[i] 
+            n_comp, labels = connected_components(csgraph=graph,
+                                                  directed=False,
+                                                  return_labels=True)
+            term_clusters = []
+            term_edge_sizes = []
+            for comp_idx in range(n_comp):
+                nodes_in_comp = np.where(labels == comp_idx)[0]
+                if len(nodes_in_comp) > 1:
+                    comp_mask = mask[np.ix_(nodes_in_comp, nodes_in_comp)]
+                    num_edges = np.sum(np.triu(comp_mask, k=1))
+                    if num_edges > 0:
+                       term_edge_sizes.append(num_edges)
+                       edge_list = []
+                       rows, cols = np.triu_indices_from(comp_mask, k=1)
+                       for r, c in zip(rows, cols):
+                           if comp_mask[r, c]:
+                               original_r, original_c = nodes_in_comp[r], nodes_in_comp[c]
+                               edge_list.append(tuple(sorted((original_r, original_c))))
+                       term_clusters.append(edge_list)
+            clusters.append(term_clusters)
+            if term_edge_sizes:
+                 edge_sizes.append(term_edge_sizes)
+            else:
+                 edge_sizes.append([0]) 
+        return clusters, edge_sizes
+    
+    def permute_nbs(self, shuffle_col, contrast=None, alpha=0.05,
+                    n_perm=1000, seed=None, two_sided=False):
+        """
+        Permutation testing for ANOVA or a contrast.
+
+        If contrast is None, permutes F-statistics; else T-statistics.
+        shuffle_col : column name in self.df for subject labels.
+        contrast : array_like or None
+        """
+        if self.df is None or self.y is None:
+            raise ValueError("df and y must be provided for permutation tests")
+        rng = np.random.default_rng(seed)
+        self.fit()
+        df_resid = self.results_['df_resid']
+        # Compute observed statistics
+        if contrast is None:
+            df_terms = self.results_['df_terms']
+            obs = self.results_["f_values"]  # shape (n_terms, n_voxels)
+            threshold = f.ppf(1 - alpha, dfn=df_terms, dfd=df_resid)
+            
+        else:
+            tt = self.t_test(contrast, two_sided=two_sided)
+            obs = tt["t_values"][None, :]
+            if two_sided:
+                threshold = t.ppf(1 - alpha / 2, df=df_resid)
+            else:
+                threshold = t.ppf(1 - alpha, df=df_resid)
+            
+        n_term, _ = obs.shape
+        # observed suprathrehold mask and extract clusters of edges
+        graph_obs, mask_obs = self._arr2graph(obs, threshold=threshold)
+        obs_clusters_edges, obs_cluster_sizes = self._compute_cluster_size(graph_obs, mask_obs)
+        
+        unique_subj = self.df[shuffle_col].unique()
+        null_max_size = np.zeros((n_perm, n_term), dtype=int)
+        subject_indices_map = {subj: np.where(self.df[shuffle_col] == subj)[0]
+                               for subj in unique_subj}
+
+        for p in range(n_perm):
+            permuted_subj_indices = rng.permutation(len(unique_subj))
+            yp = np.zeros_like(self.y)
+            current_start_row = 0
+            for i in range(len(unique_subj)):
+                original_subject_index = permuted_subj_indices[i]
+                subject_whose_data_to_take = unique_subj[original_subject_index]
+                source_indices = subject_indices_map[subject_whose_data_to_take]
+                num_rows_for_subject = len(source_indices)
+                target_slice = slice(current_start_row, current_start_row + num_rows_for_subject)
+                if self.y.ndim == 1:
+                    yp[target_slice] = self.y[source_indices]
+                elif self.y.ndim == 2:
+                    yp[target_slice, :] = self.y[source_indices, :]
+                else:
+                    raise NotImplementedError("y shuffling for ndim > 2 not implemented")
+                current_start_row += num_rows_for_subject
+            
+            # rebuild design
+            m_perm = self.model.__class__(self.model.formula, self.df, yp).fit()
+            a_perm = Anova(m_perm, typ=self.typ)
+            if contrast is None:
+                a_perm.fit()
+                stat_p = a_perm.results_["f_values"]
+            else:
+                stat_p = a_perm.t_test(contrast, two_sided=two_sided)["t_values"]
+            graph_p, mask_p = self._arr2graph(stat_p, threshold=threshold)
+            _, perm_cluster_sizes  = self._compute_cluster_size(graph_p, mask_p)
+            for term_idx in range(n_term):
+                if term_idx < len(perm_cluster_sizes) and perm_cluster_sizes[term_idx]:
+                    null_max_size[p, term_idx] = np.max(perm_cluster_sizes[term_idx])
+            
+        cluster_p_values = []
+        for term_idx in range(n_term):
+            term_pvals = []
+            current_obs_sizes = obs_cluster_sizes[term_idx] if term_idx < len(obs_cluster_sizes) else [0]
+            for obs_size in current_obs_sizes:
+                if obs_size == 0: # Skip if observed size is 0 (placeholder)
+                    term_pvals.append(1.0) # P-value is 1 if observed size is 0
+                    continue
+                # Proportion of permutations where max size >= observed size
+                # Add 1 to numerator and denominator for conservative p-value (prevents p=0)
+                p_val = (np.sum(null_max_size[:, term_idx] >= obs_size) + 1) / (n_perm + 1)
+                term_pvals.append(p_val)
+            cluster_p_values.append(term_pvals)
+        return obs_clusters_edges, cluster_p_values, null_max_size, obs_cluster_sizes
