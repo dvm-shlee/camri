@@ -313,7 +313,7 @@ def amplitude_low_freq_fluctuation(data: np.ndarray,
     """
     io_handler.write('Calculating ALFF...')
     f, pxx = power_spectral_density(data, dt=dt)
-    alff = pxx[..., (f >= lowcut) & (f <= highcut)].sum(-1)
+    alff = np.sqrt(pxx[..., (f >= lowcut) & (f <= highcut)]).sum(-1)
     if fraction:
         alff[np.nonzero(pxx.sum(-1))] /= pxx.sum(-1)[np.nonzero(pxx.sum(-1))]
     io_handler.write('[Done]\n')
