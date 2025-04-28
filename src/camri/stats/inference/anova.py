@@ -7,7 +7,7 @@ from ...utils import arr2mat
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-
+from scipy.linalg import pinvh
 
 class Anova:
     def __init__(self, model, typ="I"):
@@ -204,6 +204,7 @@ class Anova:
 
         # Invert each covariance matrix: shape (n_targets, J, J)
         invcov = np.linalg.pinv(cov)
+        # invcov = np.stack([pinvh(c, atol=1e-15, rtol=1e-10) for c in cov], axis=0)
 
         # Compute numerator via Einstein summation:
         # num[t] = Rb[:, t]^T @ invcov[t] @ Rb[:, t]
@@ -249,6 +250,28 @@ class Anova:
 
         return {"t_values":t_vals, "p_values":p_vals}
     
+    def _permute_once(self, shuffle_col, rng):
+        unique_subj = self.df[shuffle_col].unique()
+        subject_indices_map = {subj: np.where(self.df[shuffle_col] == subj)[0] for subj in unique_subj}
+        
+        permuted_subj_indices = rng.permutation(len(unique_subj))
+        yp = np.zeros_like(self.y)
+        current_start_row = 0
+        for i in range(len(unique_subj)):
+            original_subject_index = permuted_subj_indices[i]
+            subject_whose_data_to_take = unique_subj[original_subject_index]
+            source_indices = subject_indices_map[subject_whose_data_to_take]
+            num_rows_for_subject = len(source_indices)
+            target_slice = slice(current_start_row, current_start_row + num_rows_for_subject)
+            if self.y.ndim == 1:
+                yp[target_slice] = self.y[source_indices]
+            elif self.y.ndim == 2:
+                yp[target_slice, :] = self.y[source_indices, :]
+            else:
+                raise NotImplementedError
+            current_start_row += num_rows_for_subject
+        return yp
+    
     def permute(self, shuffle_col, contrast=None, n_perm=1000, seed=None, 
                 two_sided=False, max_stat=False):
         """
@@ -272,27 +295,8 @@ class Anova:
         null_dist = np.zeros((n_perm, n_terms, n_voxels))
         null_max = np.zeros((n_perm, n_terms))
 
-        unique_subj = self.df[shuffle_col].unique()
-        subject_indices_map = {subj: np.where(self.df[shuffle_col] == subj)[0]
-                               for subj in unique_subj}
-
         for p in range(n_perm):
-            permuted_subj_indices = rng.permutation(len(unique_subj))
-            yp = np.zeros_like(self.y)
-            current_start_row = 0
-            for i in range(len(unique_subj)):
-                original_subject_index = permuted_subj_indices[i]
-                subject_whose_data_to_take = unique_subj[original_subject_index]
-                source_indices = subject_indices_map[subject_whose_data_to_take]
-                num_rows_for_subject = len(source_indices)
-                target_slice = slice(current_start_row, current_start_row + num_rows_for_subject)
-                if self.y.ndim == 1:
-                    yp[target_slice] = self.y[source_indices]
-                elif self.y.ndim == 2:
-                    yp[target_slice, :] = self.y[source_indices, :]
-                else:
-                    raise NotImplementedError("y shuffling for ndim > 2 not implemented")
-                current_start_row += num_rows_for_subject
+            yp = self._permute_once(shuffle_col, rng)
 
             m = self.model.__class__(self.model.formula, self.df, yp).fit()
             a = Anova(m, typ=self.typ)
@@ -411,29 +415,10 @@ class Anova:
         graph_obs, mask_obs = self._arr2graph(obs, threshold=threshold)
         obs_clusters_edges, obs_cluster_sizes = self._compute_cluster_size(graph_obs, mask_obs)
         
-        unique_subj = self.df[shuffle_col].unique()
         null_max_size = np.zeros((n_perm, n_term), dtype=int)
-        subject_indices_map = {subj: np.where(self.df[shuffle_col] == subj)[0]
-                               for subj in unique_subj}
 
         for p in range(n_perm):
-            permuted_subj_indices = rng.permutation(len(unique_subj))
-            yp = np.zeros_like(self.y)
-            current_start_row = 0
-            for i in range(len(unique_subj)):
-                original_subject_index = permuted_subj_indices[i]
-                subject_whose_data_to_take = unique_subj[original_subject_index]
-                source_indices = subject_indices_map[subject_whose_data_to_take]
-                num_rows_for_subject = len(source_indices)
-                target_slice = slice(current_start_row, current_start_row + num_rows_for_subject)
-                if self.y.ndim == 1:
-                    yp[target_slice] = self.y[source_indices]
-                elif self.y.ndim == 2:
-                    yp[target_slice, :] = self.y[source_indices, :]
-                else:
-                    raise NotImplementedError("y shuffling for ndim > 2 not implemented")
-                current_start_row += num_rows_for_subject
-            
+            yp = self._permute_once(shuffle_col, rng)
             # rebuild design
             m_perm = self.model.__class__(self.model.formula, self.df, yp).fit()
             a_perm = Anova(m_perm, typ=self.typ)
