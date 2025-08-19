@@ -6,7 +6,6 @@ from ...utils import arr2mat
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-# from scipy.linalg import pinvh
 
 class Anova:
     def __init__(self, model, typ="I"):
