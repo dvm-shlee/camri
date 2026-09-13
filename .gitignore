@@ -50,4 +50,4 @@ pytest_cache/
 *.bak
 *.swp
 dataset/
-tests/
+.camri/

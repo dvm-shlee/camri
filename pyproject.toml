@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "camri"
 dynamic = ['version']
-description = "Useful utility module for CAMRI at UNC at Chapel Hill"
+description = "Composable execution and neuroimaging analysis toolbox"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -20,27 +20,26 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10"
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
 ]
 keywords = ["neuroimage", "python"]
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 dependencies = [
-    "pytest",
-    "pyyaml>=6.0.0",
-    "packaging>=23.0",
-    "scipy",
-    "pandas",
     "numpy",
+    "scipy",
     "nibabel",
-    "matplotlib",
-    "tqdm",
-    "ipympl>=0.9.7",
-    "ipywidgets>=8.1.2"
 ]
-urls = {Homepage = "https://camri.org"}
+urls = { Homepage = "https://camri.org" }
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.8"]
+jupyter = ["matplotlib>=3.8", "ipympl>=0.9.7", "ipywidgets>=8.1.2", "ipython>=8.0"]
+marimo = ["matplotlib>=3.8", "marimo>=0.10"]
+bids = ["pybids>=0.17"]
+all = ["matplotlib>=3.8", "ipympl>=0.9.7", "ipywidgets>=8.1.2", "ipython>=8.0", "marimo>=0.10", "pybids>=0.17"]
 
 # Additional configuration specific to hatch can go under 'tool.hatch.*'
 [tool.hatch.version]
@@ -55,4 +54,22 @@ packages = ["src/camri"]
 
 [tool.pytest.ini_options]
 log_cli = true
-log_cli_level = "DEBUG"
+log_cli_level = "INFO"
+testpaths = ["tests"]
+markers = [
+    "integration: requires a local external runtime",
+    "slurm: requires a SLURM installation",
+]
+
+[dependency-groups]
+test = ["pytest>=8", "coverage[toml]>=7"]
+dev = ["ruff>=0.6", "mypy>=1.11"]
+
+[tool.uv]
+default-groups = ["test", "dev"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_configs = true
+check_untyped_defs = true
